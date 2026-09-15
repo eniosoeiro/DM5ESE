@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DM5ESE · Datalogger</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <header><div class="brand"><span class="brand-icon">D</span> DM5E<span class="light">SE</span></div><span class="version">DATALOGGER / v0.1</span></header>
+    <main>
+      <div class="eyebrow">GE / WAYGATE TECHNOLOGIES</div>
+      <h1>Do medidor para o computador.</h1>
+      <p class="intro">Leitura e exportação de espessuras do DM5E. Comece identificando a conexão do seu instrumento.</p>
+      <div class="steps"><span class="active">01 &nbsp; Identificar conexão</span><span>02 &nbsp; Ler datalogger</span><span>03 &nbsp; Exportar medições</span></div>
+      <section class="panel" aria-labelledby="connection-title">
+        <div class="panel-heading"><div><div class="eyebrow">CONEXÃO</div><h2 id="connection-title">Portas disponíveis</h2></div><button id="refresh">Atualizar portas</button></div>
+        <p id="status" role="status" aria-live="polite">Preparando consulta…</p>
+        <div id="ports" class="ports"></div>
+        <div class="controls"><label for="port">Porta do medidor</label><select id="port"><option value="0">Automática · USB DM5E</option></select><button id="connect">Conectar e listar arquivos</button><button id="cancel" class="secondary" disabled>Cancelar</button></div>
+        <p id="driver-status" class="hint">Verificando componente GE…</p>
+        <div class="panel-footer"><span id="updated">Ainda não consultado</span><button id="export" class="secondary">Salvar diagnóstico</button></div>
+      </section>
+      <div class="bottom-grid">
+        <section class="panel"><div class="eyebrow">PRIMEIRA CONEXÃO</div><h2>Prepare o instrumento</h2><ol><li>Ligue o DM5E com pilhas. O USB não alimenta o aparelho.</li><li>Conecte um cabo de dados mini-USB diretamente ao computador.</li><li>Verifique o driver de porta COM virtual do DM5E no Windows.</li><li>Atualize a lista e confira a porta que apareceu.</li></ol></section>
+        <section class="panel"><div class="eyebrow">DATALOGGER</div><h2>Arquivos do instrumento</h2><p id="connection-info">Conecte para consultar os arquivos salvos.</p><label for="files">Arquivo a capturar</label><select id="files" disabled><option value="">Nenhum arquivo listado</option></select><button id="capture" disabled>Capturar arquivo selecionado</button></section>
+      </div>
+      <section class="panel measurements"><div class="panel-heading"><div><div class="eyebrow">CAPTURA</div><h2>Espessuras registradas</h2></div><div class="controls"><button id="copy-all" disabled>Copiar planilha</button><button id="copy-selection" class="secondary" disabled>Copiar seleção</button><button id="csv" class="secondary" disabled>Exportar CSV</button><button id="json" class="secondary" disabled>Salvar JSON</button></div></div><p id="capture-info">Nenhuma captura concluída nesta sessão.</p><div class="sheet-bar"><strong id="sheet-name">Planilha</strong><span id="selection-info">Clique em uma célula; Shift + clique seleciona um intervalo. Ctrl+C copia.</span></div><div class="table-scroll" id="sheet-scroll" tabindex="0" aria-label="Planilha de espessuras, somente leitura"><table class="spreadsheet"><thead id="sheet-head"></thead><tbody id="readings"></tbody></table></div><p id="copy-status" role="status" aria-live="polite"></p><div class="panel-footer"><button id="previous" class="secondary" disabled>Anterior</button><span id="page">Sem dados</span><button id="next" class="secondary" disabled>Próxima</button></div></section>
+      <details class="panel measurements"><summary>Registro da sessão</summary><pre id="log" aria-live="polite"></pre></details>
+      <footer>DM5ESE <span>Versão para teste · Captura de arquivos do datalogger</span></footer>
+    </main>
+  </body>
+</html>
