@@ -94,6 +94,11 @@ public final class UsbExperiment extends Instrumentation {
     @Override public void onStart() {
         Bundle result=new Bundle();
         try {
+            if ("SYNC_UX_TEST".equals(arguments.getString("authorization"))) {
+                int passed=SyncSelectionUiChecks.run(this);
+                result.putString("stream", "PASS: " + passed + " selector UX checks; no network, USB or saved capture changes");
+                finish(0,result); return;
+            }
             if ("SYNC_LOCAL_TEST".equals(arguments.getString("authorization"))) {
                 int passed=CloudSyncChecks.run(this);
                 result.putString("stream", "PASS: " + passed + " isolated cloud-sync checks; synthetic transport, no USB or production writes");

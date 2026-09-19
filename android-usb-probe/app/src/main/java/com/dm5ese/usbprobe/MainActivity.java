@@ -513,6 +513,7 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() { super.onStart(); active = true; refreshDevices(); resumePermission(); diagnosticHandler.removeCallbacks(sampleUsb); diagnosticHandler.post(sampleUsb); }
     @Override protected void onStop() { ThicknessSyncDialog.pause(this); logEvent("pausa_app", "Leituras interrompidas ao sair da tela"); active = false; diagnosticHandler.removeCallbacks(sampleUsb); cancel(); super.onStop(); }
     @Override protected void onDestroy() {
+        ThicknessSyncDialog.dismissSelection(this);
         unregisterReceiver(permissionReceiver); unregisterReceiver(attachmentReceiver); worker.shutdownNow(); cellWriter.shutdown(); super.onDestroy();
     }
     private void cancel() {

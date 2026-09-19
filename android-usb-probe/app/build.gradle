@@ -8,8 +8,8 @@ android {
         applicationId 'com.dm5ese.usbprobe'
         minSdk 33
         targetSdk 35
-        versionCode 35
-        versionName '0.17.0'
+        versionCode 36
+        versionName '0.18.0'
         // Only public SPA configuration is reused; never read admin or signing secrets.
         def publicConfig = [:]
         def publicEnv = rootProject.file('../../gestaonr13-app/.env.local')
@@ -38,7 +38,11 @@ android {
     }
 }
 
-dependencies { testImplementation 'junit:junit:4.13.2' }
+dependencies {
+    implementation 'com.google.android.material:material:1.13.0'
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    testImplementation 'junit:junit:4.13.2'
+}
 
 // Distribution filename follows the version embedded in the APK.
 def exportDebugApk = tasks.register('exportDebugApk', Copy) {

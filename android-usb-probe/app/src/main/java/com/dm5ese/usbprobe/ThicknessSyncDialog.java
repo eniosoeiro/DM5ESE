@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class ThicknessSyncDialog {
     private static final AtomicBoolean BUSY = new AtomicBoolean();
     private static volatile Run activeRun;
+    private static ThicknessSelectionSheet activeSelection;
+    private static Activity selectionOwner;
     private static final class Run {
         final Activity activity; final ThicknessSyncClient client; final ProgressDialog progress;
         final AtomicBoolean stopped = new AtomicBoolean();
@@ -31,28 +33,19 @@ final class ThicknessSyncDialog {
     static void show(Activity a, CaptureStore store, Executor worker, Runnable refresh) {
         if(BUSY.get()){message(a,"Sincronização","Há um envio em andamento. Aguarde o resultado ou use Pausar.");return;}
         if(!new ThicknessSyncClient().configured()){message(a,"Configuração de sincronização","Instale o APK atualizado com configuração pública do IntegraNR.");return;}
-        List<JSONObject> captures=new ArrayList<>();int unreadable=0;
-        List<File> history=store.history();
-        for(File file:history.subList(0,Math.min(100,history.size())))try{captures.add(store.load(file));}catch(Exception e){unreadable++;}
-        if(captures.isEmpty()){message(a,"Sincronizar com IntegraNR",unreadable>0?"Não foi possível ler as capturas. Preserve os arquivos e confira o armazenamento.":"Não há capturas salvas. Colete ou prepare uma matriz no celular primeiro.");return;}
-        LinearLayout list=column(a);TextView info=new TextView(a);
-        info.setText("Selecione até 10 revisões por envio. Exibidas as 100 mais recentes. Nada é enviado sem seleção. A coleta continua offline. Receber na nuvem não incorpora pontos à inspeção."+(unreadable>0?" Alguns arquivos não puderam ser lidos; eles foram preservados.":""));list.addView(info);
-        List<CheckBox> boxes=new ArrayList<>();ThicknessSyncQueue queue=new ThicknessSyncQueue(a);
-        for(JSONObject c:captures){
-            JSONArray points=c.optJSONArray("readings");int empty=0;
-            for(int i=0;points!=null&&i<points.length();i++)if(points.optJSONObject(i)!=null && "EMPTY".equals(points.optJSONObject(i).optString("state")))empty++;
-            String revision=c.optString("captureId","sem-id"), at=c.optString("editedAt",c.optString("capturedAt","data ausente"));
-            CheckBox box=new CheckBox(a);box.setText(c.optString("file","Sem nome")+" · rev. "+revision.substring(0,Math.min(8,revision.length()))+"\n"+at+"\n"+(points==null?0:points.length())+" células · "+empty+" vazias\n"+ThicknessSyncQueue.label(queue.statusForLastAccount(c)));
-            box.setTag(c);list.addView(box);boxes.add(box);
-        }
-        ScrollView scroll=new ScrollView(a);scroll.addView(list);
-        AlertDialog chooser=new AlertDialog.Builder(a).setTitle("ES Medição → IntegraNR").setView(scroll).setNegativeButton("Cancelar",null).setPositiveButton("Continuar",null).create();
-        chooser.setOnShowListener(v->chooser.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{
-            List<JSONObject> picked=new ArrayList<>();for(CheckBox box:boxes)if(box.isChecked())picked.add((JSONObject)box.getTag());
-            if(picked.isEmpty()||picked.size()>ThicknessSyncRules.MAX_BATCH){info.setText("Selecione de 1 a 10 revisões para este envio.");return;}
-            chooser.dismiss();credentials(a,worker,refresh,picked);
-        }));chooser.show();
+        if(activeSelection!=null && activeSelection.isShowing())return;
+        selectionOwner=a;
+        activeSelection=ThicknessSelectionSheet.create(a,store,worker,picked->{
+            if(activeSelection!=null){activeSelection.dismiss();activeSelection=null;}
+            selectionOwner=null;
+            credentials(a,worker,refresh,picked);
+        });
+        activeSelection.show();
     }
+    static void dismissSelection(Activity a){
+        if(selectionOwner==a && activeSelection!=null){activeSelection.dismiss();activeSelection=null;selectionOwner=null;}
+    }
+
     private static void credentials(Activity a,Executor worker,Runnable refresh,List<JSONObject> picked){
         LinearLayout form=column(a);EditText email=new EditText(a);email.setHint("E-mail do IntegraNR");email.setInputType(33);form.addView(email);
         EditText password=new EditText(a);password.setHint("Senha");password.setInputType(129);form.addView(password);

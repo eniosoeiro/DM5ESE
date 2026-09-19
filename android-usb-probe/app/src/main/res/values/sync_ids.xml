@@ -1,0 +1,10 @@
+<resources>
+    <item name="sync_close_button" type="id" />
+    <item name="sync_search_field" type="id" />
+    <item name="sync_sort_button" type="id" />
+    <item name="sync_capture_list" type="id" />
+    <item name="sync_selection_counter" type="id" />
+    <item name="sync_clear_selection" type="id" />
+    <item name="sync_selection_notice" type="id" />
+    <item name="sync_continue_button" type="id" />
+</resources>
