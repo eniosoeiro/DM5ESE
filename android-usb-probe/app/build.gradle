@@ -8,8 +8,8 @@ android {
         applicationId 'com.dm5ese.usbprobe'
         minSdk 33
         targetSdk 35
-        versionCode 37
-        versionName '0.19.0'
+        versionCode 38
+        versionName '0.20.0'
         // Only public SPA configuration is reused; never read admin or signing secrets.
         def publicConfig = [:]
         def publicEnv = rootProject.file('../../gestaonr13-app/.env.local')

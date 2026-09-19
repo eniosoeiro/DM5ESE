@@ -1,0 +1,10 @@
+<resources>
+<style name="ProfessionalEditText" parent="android:style/Widget.Material.Light.EditText">
+<item name="android:background">@drawable/pro_edit_background</item>
+<item name="android:textColor">#133348</item><item name="android:textColorHint">#607586</item>
+<item name="android:textSize">15sp</item><item name="android:minHeight">56dp</item>
+<item name="android:paddingStart">16dp</item><item name="android:paddingEnd">16dp</item>
+<item name="android:paddingTop">12dp</item><item name="android:paddingBottom">12dp</item>
+</style>
+<color name="pro_launcher_background">#0B2D42</color>
+</resources>

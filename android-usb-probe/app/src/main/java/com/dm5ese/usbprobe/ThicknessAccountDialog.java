@@ -39,7 +39,7 @@ final class ThicknessAccountDialog {
         });
     }
     private static void connected(Activity a,Executor worker,int count,ThicknessSessionStore store,JSONObject saved,Consumer<Choice> selected){
-        var dialog=new MaterialAlertDialogBuilder(theme(a)).setTitle("Conectado ao IntegraNR")
+        var dialog=new MaterialAlertDialogBuilder(theme(a)).setTitle(R.string.pro_account_saved)
             .setMessage(saved.optString("email")+"\n\n"+count+" arquivo(s) selecionado(s). Sua sessão será conferida antes do envio.")
             .setNegativeButton("Cancelar",null)
             .setPositiveButton("Conferir e enviar",(d,w)->selected.accept(new Choice(null,null,saved,true,store)))
@@ -56,9 +56,9 @@ final class ThicknessAccountDialog {
         Context c=theme(a);LinearLayout form=SyncSheetUi.vertical(c);
         int pad=SyncSheetUi.dp(c,24);form.setPadding(pad,pad,pad,0);
         EditText email=new EditText(c);email.setHint("E-mail do IntegraNR");email.setInputType(33);
-        email.setAutofillHints(View.AUTOFILL_HINT_EMAIL_ADDRESS);form.addView(email);
+        email.setAutofillHints(View.AUTOFILL_HINT_EMAIL_ADDRESS);ProfessionalUi.decorateInput(email);form.addView(email);
         EditText password=new EditText(c);password.setHint("Senha");password.setInputType(129);
-        password.setAutofillHints(View.AUTOFILL_HINT_PASSWORD);form.addView(password);
+        password.setAutofillHints(View.AUTOFILL_HINT_PASSWORD);ProfessionalUi.decorateInput(password);form.addView(password);
         CheckBox remember=new CheckBox(c);remember.setText("Manter conectado neste dispositivo");remember.setChecked(true);form.addView(remember);
         form.addView(SyncSheetUi.text(c,"A conexão é protegida pelo Android. A senha não será gravada. Você pode sair e esquecer a conta.",12,SyncSheetUi.MUTED,false));
         CheckBox consent=new CheckBox(c);consent.setText("Confirmo o envio dos "+count+" arquivos selecionados para minha conta/empresa.");form.addView(consent);

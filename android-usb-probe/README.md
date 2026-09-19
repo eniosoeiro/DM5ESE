@@ -1,9 +1,11 @@
+> Visual 0.20.0 aplicado: nova tela Início, cinco destinos de navegação, marca vetorial, atalhos e Ajustes reorganizados. Detalhes e validações: `../docs/android-v0.20.0-design.md`. Logos editáveis: `branding/`.
+
 > Atualização 0.19.0: conexão lembrada com proteção do Android, hash por arquivo e confirmação antes de sobrescrever. Veja `../docs/android-v0.19.0-conta-hash.md`.
 
 # ES Medição — aplicativo Android
 
-Versão atual: **0.19.0**, com envio de capturas para IntegraNR / Med.Online / Medição de espessuras.
-APK: `../artifacts/android-usb/ES-Medicao-v0.19.0.apk`. Instale como atualização para preservar as capturas.
+Versão atual: **0.20.0**, com envio de capturas para IntegraNR / Med.Online / Medição de espessuras.
+APK: `../artifacts/android-usb/ES-Medicao-v0.20.0.apk`. Instale como atualização para preservar as capturas.
 Nova interface de seleção: `../docs/android-v0.18.0-ux.md`.
 Sincronização, configuração pública e limites: `../docs/android-v0.17.0-sincronizacao.md`.
 As seções seguintes também contêm registros históricos das versões anteriores.

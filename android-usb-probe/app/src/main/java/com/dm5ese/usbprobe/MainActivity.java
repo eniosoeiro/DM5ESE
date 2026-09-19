@@ -16,6 +16,13 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
+    private DashboardPanel dashboard;
+    private LinearLayout cloud,connectionDisclosure;
+    private Button homeTab,cloudTab,exportCsv,exportJson;
+    private TextView cloudAccountSummary,settingsAccountSummary;
+    private final ExecutorService displayWorker=Executors.newSingleThreadExecutor();
+    private boolean overviewLoading;
+    private int selectedTab=3;
     private static final String PERMISSION = "com.dm5ese.usbprobe.USB_PERMISSION";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Object commitLock = new Object();
@@ -209,7 +216,7 @@ public final class MainActivity extends Activity {
             try { renderCapture(); } catch (JSONException e) { status.setText("Recibo salvo, mas a prévia local não pôde ser atualizada."); }
         }));
         InstrumentStyle.button(sync, false, false);
-        createLiveView(); setContentView(root); showTab(0); renderSettings();
+        createLiveView(); applyProfessionalShell(root,content,brand,tabs); setContentView(root); showTab(saved==null?3:saved.getInt("ui.tab",3)); renderSettings();
         registerReceiver(permissionReceiver, new IntentFilter(PERMISSION), Context.RECEIVER_NOT_EXPORTED);
         IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
@@ -223,12 +230,143 @@ public final class MainActivity extends Activity {
                     JSONObject draft=store.load(candidate);
                     if(draftId.equals(draft.optString("captureId"))) { capture=draft; break; }
                 }
+                if(saved!=null){
+                    String preferred=saved.getString("ui.capture","");
+                    if(!preferred.isBlank())for(File candidate:savedFiles){
+                        JSONObject previous=store.load(candidate);if(preferred.equals(previous.optString("captureId"))){capture=previous;break;}
+                    }
+                    page=Math.max(0,saved.getInt("ui.page",0));
+                }
                 renderCapture(); filesPanel.setVisibility(View.GONE); status.setText("Captura salva no celular • disponível offline");
             }
             catch (Exception e) { logEvent("erro", e.toString()); status.setText("Falha ao abrir captura salva: " + e.getMessage()); }
         }
         updateControls();
     }
+    private void applyProfessionalShell(LinearLayout root,LinearLayout content,LinearLayout brand,LinearLayout tabs){
+        root.setId(R.id.pro_root);root.setBackgroundColor(Color.WHITE);pageScroll.setId(R.id.pro_main_scroll);
+        pageScroll.setBackgroundColor(ProfessionalUi.PAGE);content.setPadding(dp(16),dp(16),dp(16),dp(20));
+        brand.removeAllViews();brand.setBackgroundColor(Color.WHITE);brand.setPadding(dp(18),dp(8),dp(18),dp(10));
+        LinearLayout heading=new LinearLayout(this);heading.setGravity(android.view.Gravity.CENTER_VERTICAL);brand.addView(heading);
+        ImageView mark=new ImageView(this);mark.setId(R.id.pro_logo);mark.setImageResource(R.drawable.brand_mark_dark);mark.setContentDescription(getString(R.string.pro_brand));
+        heading.addView(mark,new LinearLayout.LayoutParams(dp(52),dp(42)));
+        LinearLayout names=ProfessionalUi.column(this);names.setPadding(dp(10),0,0,0);heading.addView(names,new LinearLayout.LayoutParams(0,-2,1));
+        names.addView(ProfessionalUi.text(this,getString(R.string.pro_brand),21,ProfessionalUi.NAVY,true));
+        TextView tagline=ProfessionalUi.text(this,getString(R.string.pro_tagline),7,ProfessionalUi.MUTED,true);tagline.setLetterSpacing(.1f);names.addView(tagline);
+        Button account=ProfessionalUi.button(this,R.string.pro_account_short,R.drawable.ic_pro_user,false,()->showTab(4));
+        account.setTextSize(11);account.setMinHeight(dp(48));heading.addView(account,new LinearLayout.LayoutParams(-2,-2));
+        usbBadge.setBackgroundColor(Color.TRANSPARENT);usbBadge.setTextSize(10);usbBadge.setPadding(dp(4),dp(6),0,0);brand.addView(usbBadge);
+        if(operationPanel.getChildCount()>0){operationPanel.removeViewAt(0);ProgressBar progress=new ProgressBar(this);operationPanel.addView(progress,0,new LinearLayout.LayoutParams(dp(24),dp(24)));}
+        homeTab=button(tabs,getString(R.string.pro_home),()->showTab(3));cloudTab=button(tabs,getString(R.string.pro_cloud),()->showTab(4));
+        tabs.removeAllViews();Button[] nav={homeTab,measurementsTab,liveTab,cloudTab,settingsTab};
+        int[] icons={R.drawable.ic_pro_home,R.drawable.ic_pro_grid,R.drawable.ic_pro_wave,R.drawable.ic_pro_cloud,R.drawable.ic_pro_settings};
+        int[] ids={R.id.pro_nav_home,R.id.pro_nav_measurements,R.id.pro_nav_live,R.id.pro_nav_cloud,R.id.pro_nav_settings};
+        for(int n=0;n<nav.length;n++){nav[n].setId(ids[n]);navigationIcon(nav[n],icons[n]);nav[n].setMinHeight(dp(60));tabs.addView(nav[n],new LinearLayout.LayoutParams(0,-2,1));}
+        tabs.setPadding(dp(8),dp(6),dp(8),dp(6));
+        dashboard=new DashboardPanel(this,this::createOfflineGrid,this::history,this::startCloudSync,this::openConnection,this::openLocalCapture);
+        content.addView(dashboard,0,new LinearLayout.LayoutParams(-1,-2));
+        cloud=ProfessionalUi.column(this);content.addView(cloud,new LinearLayout.LayoutParams(-1,-2));
+        ProfessionalUi.title(cloud,R.string.pro_cloud_title,R.string.pro_cloud_hint);
+        cloudAccountSummary=accountCard(cloud);
+        LinearLayout upload=ProfessionalUi.card(cloud);
+        upload.addView(ProfessionalUi.text(this,getString(R.string.pro_sync),20,ProfessionalUi.INK,true));
+        TextView hint=ProfessionalUi.text(this,getString(R.string.pro_cloud_safety),13,ProfessionalUi.MUTED,false);hint.setPadding(0,dp(8),0,dp(12));upload.addView(hint);
+        move(sync,upload);sync.setId(R.id.pro_cloud_send);sync.setText(R.string.pro_select_send);ProfessionalUi.setIcon(sync,R.drawable.ic_pro_cloud);ProfessionalUi.styleButton(sync,true,false);
+        sync.setOnClickListener(v->startCloudSync());
+        LinearLayout hashing=ProfessionalUi.card(cloud);hashing.setBackground(ProfessionalUi.shape(this,ProfessionalUi.MINT,0,18));
+        hashing.addView(ProfessionalUi.text(this,getString(R.string.pro_hash_title),16,ProfessionalUi.TEAL,true));
+        hashing.addView(ProfessionalUi.text(this,getString(R.string.pro_hash_hint),13,ProfessionalUi.MUTED,false));
+        ProfessionalUi.row(cloud,R.drawable.ic_pro_cloud,R.string.pro_site,R.string.pro_site_hint,this::openMedOnline);
+        measurements.removeViewAt(0);measurements.removeViewAt(0);
+        LinearLayout mh=ProfessionalUi.column(this);ProfessionalUi.title(mh,R.string.pro_measurements,R.string.pro_measurements_hint);measurements.addView(mh,0);
+        ProfessionalUi.styleButton(history,false,false);ProfessionalUi.setIcon(history,R.drawable.ic_pro_history);
+        LinearLayout safety=ProfessionalUi.expandable(settings,R.string.pro_device_ops,R.string.pro_device_ops_hint,true);safety.setId(R.id.pro_danger_section);
+        move(createGrid,safety);move(sendNewFiles,safety);move(deleteFiles,safety);
+        buildProfessionalSettings();
+        getWindow().setStatusBarColor(Color.WHITE);getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR|View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    }
+    private static void move(View view,LinearLayout destination){
+        if(view.getParent() instanceof android.view.ViewGroup p)p.removeView(view);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=8;destination.addView(view,lp);
+    }
+    private void openMedOnline(){startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://app.gestaonr13.com.br/calibracao/med-online?tipo=espessuras")));}
+    private void openConnection(){
+        showTab(2);if(connectionDisclosure!=null)connectionDisclosure.setVisibility(View.VISIBLE);
+        connectionPanel.setVisibility(View.VISIBLE);pageScroll.post(()->{
+            android.graphics.Rect area=new android.graphics.Rect();connectionPanel.getDrawingRect(area);
+            pageScroll.offsetDescendantRectToMyCoords(connectionPanel,area);pageScroll.smoothScrollTo(0,Math.max(0,area.top+pageScroll.getScrollY()-dp(16)));
+        });
+    }
+    private void openLocalCapture(JSONObject selected){
+        if(busy||savingCell)return;
+        try{capture=selected;page=0;renderCapture();updateControls();showTab(0);status.setText(R.string.pro_review_first);}
+        catch(Exception e){logEvent("erro",e.toString());status.setText(R.string.pro_read_error);}
+    }
+    private void startCloudSync(){
+        if(busy||savingCell)return;
+        ThicknessSyncDialog.show(this,store,worker,()->{refreshOverview();try{renderCapture();}catch(JSONException e){status.setText(R.string.pro_read_error);}});
+    }
+    private TextView accountCard(LinearLayout parent){
+        LinearLayout card=ProfessionalUi.card(parent);
+        LinearLayout heading=new LinearLayout(this);heading.setGravity(android.view.Gravity.CENTER_VERTICAL);card.addView(heading);
+        heading.addView(ProfessionalUi.icon(this,R.drawable.ic_pro_user,ProfessionalUi.TEAL),new LinearLayout.LayoutParams(dp(24),dp(24)));
+        TextView title=ProfessionalUi.text(this,getString(R.string.pro_account),16,ProfessionalUi.INK,true);title.setPadding(dp(10),0,0,0);heading.addView(title);
+        TextView summary=ProfessionalUi.text(this,getString(R.string.pro_account_hint),13,ProfessionalUi.MUTED,false);summary.setPadding(0,dp(12),0,dp(8));card.addView(summary);
+        Button manage=ProfessionalUi.button(this,R.string.pro_manage,R.drawable.ic_pro_user,false,this::manageAccount);if(parent!=cloud)manage.setId(R.id.pro_settings_account);
+        ProfessionalUi.buttonSpace(card,manage);return summary;
+    }
+    private void manageAccount(){
+        if(busy||savingCell)return;
+        new AlertDialog.Builder(this).setTitle(R.string.pro_account)
+            .setMessage(cloudAccountSummary.getText())
+            .setNegativeButton(R.string.pro_cancel,null)
+            .setPositiveButton(R.string.pro_sync,(d,w)->startCloudSync()).show();
+    }
+    private void buildProfessionalSettings(){
+        settings.removeViewAt(0);
+        LinearLayout intro=ProfessionalUi.column(this);ProfessionalUi.title(intro,R.string.pro_settings,R.string.pro_settings_hint);
+        settingsAccountSummary=accountCard(intro);settings.addView(intro,0);
+        connectionPanel.setId(R.id.pro_connection_section);
+        settings.removeView(connectionPanel);
+        connectionDisclosure=ProfessionalUi.expandable(settings,R.string.pro_connect,R.string.pro_connection_settings_hint,false);
+        LinearLayout group=(LinearLayout)connectionDisclosure.getParent();settings.removeView(group);settings.addView(group,1);
+        move(connectionPanel,connectionDisclosure);connectionPanel.setBackgroundColor(Color.TRANSPARENT);connectionPanel.setPadding(0,0,0,0);
+        settings.removeView(settingsDetails);LinearLayout details=ProfessionalUi.expandable(settings,R.string.pro_metadata,R.string.pro_metadata_hint,false);move(settingsDetails,details);
+        LinearLayout exports=ProfessionalUi.card(settings);
+        exports.addView(ProfessionalUi.text(this,getString(R.string.pro_export),17,ProfessionalUi.INK,true));
+        exports.addView(ProfessionalUi.text(this,getString(R.string.pro_export_hint),12,ProfessionalUi.MUTED,false));
+        exportCsv=ProfessionalUi.button(this,R.string.pro_csv,R.drawable.ic_pro_export,false,()->export(false));exportCsv.setId(R.id.pro_export_csv);ProfessionalUi.buttonSpace(exports,exportCsv);
+        exportJson=ProfessionalUi.button(this,R.string.pro_json,R.drawable.ic_pro_export,false,()->export(true));exportJson.setId(R.id.pro_export_json);ProfessionalUi.buttonSpace(exports,exportJson);
+        ProfessionalUi.section(settings,R.string.pro_support);
+        ProfessionalUi.row(settings,R.drawable.ic_pro_help,R.string.pro_help,R.string.pro_help_hint,()->new AlertDialog.Builder(this).setTitle(R.string.pro_help).setMessage(R.string.pro_help_body).setPositiveButton(R.string.pro_dismiss,null).show());
+        ProfessionalUi.row(settings,R.drawable.ic_pro_export,R.string.pro_logs,R.string.pro_logs_hint,this::exportDiagnosticLog);
+        TextView about=ProfessionalUi.text(this,getString(R.string.pro_version,appVersion()),12,ProfessionalUi.MUTED,false);about.setGravity(android.view.Gravity.CENTER);about.setPadding(0,dp(18),0,dp(8));settings.addView(about);
+    }
+    private void refreshOverview(){
+        if(dashboard==null||overviewLoading||isDestroyed())return;overviewLoading=true;
+        CaptureStore source=store;
+        try{displayWorker.execute(()->{
+            List<DashboardPanel.Entry> entries=new ArrayList<>();int total=0;boolean failed=false;String email="";
+            try{
+                List<File> files=source.history();total=files.size();ThicknessSyncQueue ledger=new ThicknessSyncQueue(getApplicationContext());
+                for(File file:files.subList(0,Math.min(100,files.size()))){
+                    if(Thread.currentThread().isInterrupted())return;
+                    try{JSONObject value=source.load(file);entries.add(DashboardPanel.entry(value,ledger.statusForLastAccount(value)));}catch(Exception ignored){}
+                }
+                failed=total>0&&entries.isEmpty();
+            }catch(Exception e){failed=true;}
+            try{JSONObject session=new ThicknessSessionStore(getApplicationContext()).load();if(session!=null)email=session.optString("email","");}catch(Exception ignored){}
+            int count=total;boolean error=failed;String account=email;
+            runOnUiThread(()->{
+                overviewLoading=false;if(isDestroyed()||isFinishing())return;
+                dashboard.render(entries,count,error);
+                String label=account.isBlank()?getString(R.string.pro_account_hint):getString(R.string.pro_account_saved)+" · "+account+"\n"+getString(R.string.pro_account_unverified);
+                cloudAccountSummary.setText(label);settingsAccountSummary.setText(label);
+            });
+        });}catch(RejectedExecutionException e){overviewLoading=false;}
+    }
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("ui.tab",selectedTab);out.putInt("ui.page",page);if(capture!=null)out.putString("ui.capture",capture.optString("captureId"));}
     private TextView text(String value, int size) {
         TextView t = new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(InstrumentStyle.INK);
         t.setFontFeatureSettings("tnum"); t.setLineSpacing(dp(2), 1f); return t;
@@ -268,21 +406,23 @@ public final class MainActivity extends Activity {
         data.setPadding(0, dp(3), 0, dp(14)); panel.addView(data);
     }
     private void showTab(int selected) {
-        if (pageScroll != null) pageScroll.post(() -> pageScroll.scrollTo(0, 0));
-        LinearLayout[] panels = {measurements, live, settings};
-        Button[] buttons = {measurementsTab, liveTab, settingsTab};
-        for (int i = 0; i < panels.length; i++) {
-            panels[i].setVisibility(i == selected ? View.VISIBLE : View.GONE);
-            buttons[i].setBackgroundTintList(null);
-            buttons[i].setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x20087f70), InstrumentStyle.surface(i == selected ? 0xffe4f6ee : Color.WHITE, 0, dp(16)), null));
-            buttons[i].setTextColor(i == selected ? InstrumentStyle.TEAL : InstrumentStyle.MUTED);
-            buttons[i].setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(i == selected ? InstrumentStyle.TEAL : InstrumentStyle.MUTED));
-            buttons[i].setSelected(i == selected);
+        if(selected<0||selected>4)selected=3;selectedTab=selected;
+        if(pageScroll!=null)pageScroll.post(()->pageScroll.scrollTo(0,0));
+        LinearLayout[] panels={measurements,live,settings,dashboard,cloud};
+        Button[] buttons={measurementsTab,liveTab,settingsTab,homeTab,cloudTab};
+        for(int n=0;n<panels.length;n++){
+            panels[n].setVisibility(n==selected?View.VISIBLE:View.GONE);Button button=buttons[n];
+            button.setBackgroundTintList(null);
+            button.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x200f766e),ProfessionalUi.shape(this,n==selected?ProfessionalUi.MINT:Color.WHITE,0,16),null));
+            button.setTextColor(n==selected?ProfessionalUi.TEAL:ProfessionalUi.MUTED);
+            button.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(n==selected?ProfessionalUi.TEAL:ProfessionalUi.MUTED));
+            button.setSelected(n==selected);button.setStateDescription(n==selected?getString(R.string.pro_state_selected):"");
         }
+        if(active&&(selected==3||selected==4||selected==2))refreshOverview();
     }
     private void createLiveView() {
-        TextView liveTitle = text("Visor de espessura", 30); liveTitle.setTypeface(null, android.graphics.Typeface.BOLD); live.addView(liveTitle);
-        live.addView(text("Espessura numérica recebida pelo cabo USB", 14));
+        TextView liveTitle = text("Visor de espessura", 26); liveTitle.setTypeface(null, android.graphics.Typeface.BOLD); live.addView(liveTitle);
+        live.addView(text(getString(R.string.pro_live_hint), 13));
         LinearLayout numeric = card(live, "DM5E  /  LEITURA USB");
         android.graphics.drawable.GradientDrawable housing = new android.graphics.drawable.GradientDrawable();
         housing.setColor(InstrumentStyle.NAVY); housing.setCornerRadius(dp(18)); housing.setStroke(dp(1), 0xff29505e); numeric.setBackground(housing);
@@ -320,7 +460,7 @@ public final class MainActivity extends Activity {
         liveStop = button(live, "Parar visor", this::cancel);
         button(live, "Diagnóstico USB", this::showUsbDiagnostic);
         button(live, "Salvar log para enviar", this::exportDiagnosticLog);
-        LinearLayout info = card(live, "ACOMPANHAMENTO POR USB");
+        LinearLayout info = ProfessionalUi.expandable(live,R.string.pro_help,R.string.pro_live_hint,false);
         info.addView(text("O modo numérico consulta a espessura diretamente por USB, em milímetros. Sem acoplamento (U), o número é identificado como valor retido. A imagem do visor é opcional.", 14));
         info.addView(text("Sessão experimental de 2 minutos. Respostas inválidas são descartadas; após 1,5 s sem atualização, o visor fica indisponível. Nenhum parâmetro é alterado.", 13));
         info.addView(text("A velocidade do som da aba Medições pertence ao arquivo salvo. A imagem acima mostra apenas o que está na tela atual do DM5E.", 13));
@@ -503,18 +643,18 @@ public final class MainActivity extends Activity {
         detail(file, "Descrição", meta.optString("DESC"));
         detail(file, "Data de criação no DM5E", "Ainda não confirmada");
         LinearLayout storage = card(settings, "ARMAZENAMENTO");
-        detail(storage, "Capturas", "Salvas neste dispositivo"); detail(storage, "Nuvem", "Sincronização ainda não implementada");
+        detail(storage, "Capturas", "Salvas neste dispositivo"); detail(storage, "Nuvem", "IntegraNR · envio mediante seleção e confirmação");
         storage.addView(text("Versão experimental • USB e formatos adicionais ainda em validação.", 13));
     }
     private <T> void options(Spinner picker, List<T> values) {
         ArrayAdapter<T> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, values);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); picker.setAdapter(adapter);
     }
-    @Override protected void onStart() { super.onStart(); active = true; refreshDevices(); resumePermission(); diagnosticHandler.removeCallbacks(sampleUsb); diagnosticHandler.post(sampleUsb); }
+    @Override protected void onStart() { super.onStart(); active = true; refreshDevices(); resumePermission(); diagnosticHandler.removeCallbacks(sampleUsb); diagnosticHandler.post(sampleUsb); refreshOverview(); }
     @Override protected void onStop() { ThicknessSyncDialog.pause(this); logEvent("pausa_app", "Leituras interrompidas ao sair da tela"); active = false; diagnosticHandler.removeCallbacks(sampleUsb); cancel(); super.onStop(); }
     @Override protected void onDestroy() {
         ThicknessSyncDialog.dismissSelection(this);
-        unregisterReceiver(permissionReceiver); unregisterReceiver(attachmentReceiver); worker.shutdownNow(); cellWriter.shutdown(); super.onDestroy();
+        unregisterReceiver(permissionReceiver); unregisterReceiver(attachmentReceiver); displayWorker.shutdownNow(); worker.shutdownNow(); cellWriter.shutdown(); super.onDestroy();
     }
     private void cancel() {
         if(downloadingAll) {
@@ -545,8 +685,10 @@ public final class MainActivity extends Activity {
         if (usbBadge != null) {
             usbBadge.setText(devices.isEmpty() ? "○  USB não conectado  ·  modo offline"
                 : "●  DM5E detectado por USB" + (busy ? "  ·  em uso" : ""));
-            usbBadge.setTextColor(devices.isEmpty() ? 0xffc9dbe1 : 0xff8ee3d0);
+            usbBadge.setTextColor(devices.isEmpty() ? ProfessionalUi.MUTED : ProfessionalUi.TEAL);
         }
+        if(dashboard!=null){UsbDevice current=selected();dashboard.device(!devices.isEmpty(),current!=null&&usb.hasPermission(current),busy);dashboard.busy(busy||savingCell);}
+        if(exportCsv!=null){exportCsv.setEnabled(capture!=null&&!busy&&!savingCell);exportJson.setEnabled(capture!=null&&!busy&&!savingCell);}
         if (operationPanel != null) operationPanel.setVisibility(busy && !liveRunning ? View.VISIBLE : View.GONE);
         createGrid.setEnabled(!busy && !devices.isEmpty());
         if (deleteFiles != null) deleteFiles.setEnabled(!busy);
@@ -818,7 +960,7 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> { if (active && busy && generation == importGeneration) status.setText(message); });
             });
         }, value -> {
-            capture = (JSONObject) value; page = 0; renderCapture();
+            capture = (JSONObject) value; page = 0; renderCapture(); showTab(0);
             status.setText("Arquivo " + capture.getString("file") + ": " + capture.getJSONArray("readings").length()
                 + " pontos recebidos e salvos no celular.");
         });
@@ -854,11 +996,11 @@ public final class MainActivity extends Activity {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         cardParams.setMargins(0, cardPadding / 2, 0, cardPadding);
         table.addView(velocityCard, cardParams);
-        TextView velocityLabel = text("VELOCIDADE DO SOM", 12); velocityLabel.setLetterSpacing(0.08f);
+        TextView velocityLabel = text(getString(R.string.pro_velocity), 11); velocityLabel.setLetterSpacing(0.08f);
         velocityLabel.setTextColor(Color.WHITE);
         velocityLabel.setTypeface(null, android.graphics.Typeface.BOLD);
         velocityCard.addView(velocityLabel);
-        TextView velocityValue = text(velocity.isEmpty() ? "Não informada" : velocity.replace('.', ',') + " m/s", 34);
+        TextView velocityValue = text(velocity.isEmpty() ? "Não informada" : velocity.replace('.', ',') + " m/s", 24);
         velocityValue.setTextColor(0xff9ff3d8);
         velocityValue.setTypeface(null, android.graphics.Typeface.BOLD);
         velocityCard.addView(velocityValue);
@@ -935,6 +1077,7 @@ public final class MainActivity extends Activity {
         if (page > 0) button(table, "Página anterior", () -> changePage(-1));
         if (page + 1 < pages) button(table, "Próxima página", () -> changePage(1));
         table.addView(cellPanel);
+        refreshOverview();
         if (pendingPanel != null) table.addView(pendingPanel);
         updateCellPreview();
     }
@@ -1226,7 +1369,7 @@ public final class MainActivity extends Activity {
     private void changePage(int delta) { page += delta; try { renderCapture(); } catch (Exception e) { logEvent("erro", e.toString()); status.setText(e.getMessage()); } }
     private void history() {
         new SavedCapturesDialog(this,store,selectedCapture->{
-            try { capture=selectedCapture;page=0;renderCapture();updateControls();status.setText("Captura salva aberta. N\u00e3o requer conex\u00e3o USB."); }
+            try { capture=selectedCapture;page=0;renderCapture();updateControls();showTab(0);status.setText("Captura salva aberta. N\u00e3o requer conex\u00e3o USB."); }
             catch(Exception e){logEvent("erro",e.toString());status.setText("Falha ao abrir: "+e.getMessage());}
         },()->new AlertDialog.Builder(this).setTitle("\u00daltimo download")
             .setMessage(getSharedPreferences("downloads",MODE_PRIVATE).getString("lastSummary","Nenhum download registrado."))
@@ -1235,7 +1378,7 @@ public final class MainActivity extends Activity {
     private EditText draftInput(LinearLayout form,String label,String initial,boolean decimal) {
         form.addView(text(label,14));EditText input=new EditText(this);input.setText(initial);
         input.setInputType(decimal ? android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL : android.text.InputType.TYPE_CLASS_TEXT);
-        form.addView(input);return input;
+        ProfessionalUi.decorateInput(input);form.addView(input);return input;
     }
     private void createOfflineGrid() {
         if(busy || savingCell)return;
@@ -1269,7 +1412,7 @@ public final class MainActivity extends Activity {
             } catch(Exception e){velocity.setError("Informe uma velocidade válida entre 100 e 20000 m/s (até 7 caracteres).");velocity.requestFocus();return;}
             try {
                 capture=store.createDraft(fileName,rowCount,columnCount,soundVelocity);
-                page=0;renderCapture();updateControls();filesPanel.setVisibility(View.GONE);status.setText("Matriz criada no celular. Toque em uma célula para preencher; envio ao DM5E pendente.");dialog.dismiss();
+                page=0;renderCapture();updateControls();showTab(0);filesPanel.setVisibility(View.GONE);status.setText("Matriz criada no celular. Toque em uma célula para preencher; envio ao DM5E pendente.");dialog.dismiss();
             } catch(Exception e){logEvent("erro",e.toString());new AlertDialog.Builder(this).setTitle("Não foi possível criar a matriz").setMessage(e.getMessage()==null ? "Falha ao salvar no celular. Tente novamente." : e.getMessage()).setPositiveButton("Entendi",null).show();}
         }));dialog.show();
     }

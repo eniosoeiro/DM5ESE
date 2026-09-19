@@ -1,11 +1,11 @@
 <resources>
     <!-- Isolated dialog theme: existing USB screens keep InstrumentTheme. -->
     <style name="SyncSheetTheme" parent="Theme.Material3.Light.BottomSheetDialog">
-        <item name="colorPrimary">#087F70</item>
+        <item name="colorPrimary">#0F766E</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorSecondary">#087F70</item>
-        <item name="colorSurface">#F4F7F8</item>
-        <item name="colorOnSurface">#17313E</item>
+        <item name="colorSecondary">#0F766E</item>
+        <item name="colorSurface">#F3F7FA</item>
+        <item name="colorOnSurface">#133348</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
@@ -14,7 +14,7 @@
         <item name="enableEdgeToEdge">false</item>
     </style>
     <style name="SyncSheetSurface" parent="Widget.Material3.BottomSheet.Modal">
-        <item name="backgroundTint">#F4F7F8</item>
+        <item name="backgroundTint">#F3F7FA</item>
         <item name="shapeAppearanceOverlay">@style/SyncSheetShape</item>
         <item name="paddingBottomSystemWindowInsets">false</item>
         <item name="paddingLeftSystemWindowInsets">true</item>
@@ -28,9 +28,13 @@
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
     <style name="SyncAccountTheme" parent="Theme.Material3.Light.Dialog.Alert">
-        <item name="colorPrimary">#087F70</item>
-        <item name="colorSurface">#F4F7F8</item>
-        <item name="colorOnSurface">#17313E</item>
+        <item name="colorSurfaceContainerHigh">#FFFFFF</item>
+        <item name="colorSecondary">#0F766E</item>
+        <item name="android:editTextStyle">@style/ProfessionalEditText</item>
+        <item name="android:colorAccent">#0F766E</item>
+        <item name="colorPrimary">#0F766E</item>
+        <item name="colorSurface">#F3F7FA</item>
+        <item name="colorOnSurface">#133348</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
     </style>
 </resources>

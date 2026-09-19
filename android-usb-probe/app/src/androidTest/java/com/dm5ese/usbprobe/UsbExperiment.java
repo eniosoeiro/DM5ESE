@@ -94,6 +94,11 @@ public final class UsbExperiment extends Instrumentation {
     @Override public void onStart() {
         Bundle result=new Bundle();
         try {
+            if ("APP_DESIGN_TEST".equals(arguments.getString("authorization"))) {
+                int passed=ProfessionalLayoutChecks.run(this);
+                result.putString("stream","PASS: "+passed+" native app design checks; no network, credentials, USB or capture changes");
+                finish(0,result);return;
+            }
             if ("SYNC_UX_TEST".equals(arguments.getString("authorization"))) {
                 int passed=SyncSelectionUiChecks.run(this);
                 result.putString("stream", "PASS: " + passed + " selector UX checks; no network, USB or saved capture changes");

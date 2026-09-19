@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <item name="pro_nav_home" type="id" />
+    <item name="pro_nav_measurements" type="id" />
+    <item name="pro_nav_live" type="id" />
+    <item name="pro_nav_cloud" type="id" />
+    <item name="pro_nav_settings" type="id" />
+    <item name="pro_dashboard" type="id" />
+    <item name="pro_recent_list" type="id" />
+    <item name="pro_quick_new" type="id" />
+    <item name="pro_quick_files" type="id" />
+    <item name="pro_quick_sync" type="id" />
+    <item name="pro_quick_usb" type="id" />
+    <item name="pro_settings_account" type="id" />
+    <item name="pro_cloud_send" type="id" />
+    <item name="pro_export_csv" type="id" />
+    <item name="pro_export_json" type="id" />
+    <item name="pro_main_scroll" type="id" />
+    <item name="pro_root" type="id" />
+    <item name="pro_logo" type="id" />
+    <item name="pro_account_email" type="id" />
+    <item name="pro_account_password" type="id" />
+    <item name="pro_account_remember" type="id" />
+    <item name="pro_account_confirm" type="id" />
+    <item name="pro_connection_section" type="id" />
+    <item name="pro_danger_section" type="id" />
+</resources>

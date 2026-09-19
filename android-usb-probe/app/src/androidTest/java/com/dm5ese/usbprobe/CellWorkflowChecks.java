@@ -78,7 +78,21 @@ final class CellWorkflowChecks {
             JSONObject latest=isolated.load(isolated.history().get(0));
             require(latest.getJSONArray("readings").getJSONObject(0).getString("valueDecimal").equals("9.123"),"Replacement value wrong");
             require(latest.getJSONArray("localEdits").length()==2,"Audit missing");
-            main(i,()-> { call(a,"cancel"); require(!((Button)get(a,"cellSave")).isEnabled(),"Stopped session can save"); });
+            // Manual entry already exists in the production baseline. Stopping must
+            // discard the USB sample, not disable the separate manual-entry workflow.
+            main(i,()-> {
+                call(a,"cancel");
+                require(!((CellMeasurement)get(a,"cellMeasurement")).canSave(SystemClock.elapsedRealtime()),"Stopped USB sample is still saveable");
+                Button manual=(Button)get(a,"cellSave");
+                require(manual.getText().toString().equals("Informar valor no celular"),"Stopped control is not labelled as manual entry");
+                manual.performClick();
+            });
+            i.waitForIdleSync();
+            AccessibilityNodeInfo manualRoot=i.getUiAutomation().getRootInActiveWindow();
+            require(manualRoot!=null&&!manualRoot.findAccessibilityNodeInfosByText("Valor informado manualmente.").isEmpty(),"Manual confirmation missing");
+            require(isolated.history().size()==2,"Opening manual form wrote an old USB value");
+            i.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);i.waitForIdleSync();
+            require(isolated.history().size()==2,"Cancelling manual entry wrote data");
         } finally {
             main(i,()-> { call(a,"cancel"); set(a,"capture",backup[0]); set(a,"store",backup[1]); call(a,"renderCapture"); });
             for(File f:isolated.history()) if(!f.delete())throw new Exception("Test cleanup failed");
