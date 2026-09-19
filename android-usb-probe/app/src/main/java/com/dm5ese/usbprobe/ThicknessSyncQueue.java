@@ -80,6 +80,23 @@ final class ThicknessSyncQueue {
         if (!revision.equals(task.optString("revision")) || !hash.equals(task.optString("hash")))
             throw new ThicknessSyncRules.Failure("Conflito de revisão local. Preserve a captura já vinculada.", false);
     }
+    JSONObject recheckSelected(JSONObject selected)throws Exception {
+        synchronized(LOCK){
+            JSONObject task=read(file(selected.getString("revision")));if(task==null)throw new IOException("Task missing");
+            same(task,selected.getString("owner"),selected.getString("partner"),selected.getString("revision"),selected.getString("hash"));
+            if("RECEIVED".equals(task.optString("state"))){task.put("state","PENDING").put("attempts",0).put("nextAttemptAt",0);write(file(task.getString("revision")),task);}
+            return task;
+        }
+    }
+    String fileHashForLastAccount(JSONObject snapshot){
+        synchronized(LOCK){
+            try{
+                if(!"RECEIVED".equals(statusForLastAccount(snapshot)))return "";
+                JSONObject task=read(file(snapshot.getString("captureId")));JSONObject receipt=task.optJSONObject("receipt");
+                String hash=receipt==null?"":receipt.optString("fileSha256","");return hash.matches("[0-9a-f]{64}")?hash:"";
+            }catch(Exception e){return "";}
+        }
+    }
     JSONObject begin(JSONObject selected, long now) throws Exception {
         synchronized (LOCK) {
             JSONObject task = read(file(selected.getString("revision")));

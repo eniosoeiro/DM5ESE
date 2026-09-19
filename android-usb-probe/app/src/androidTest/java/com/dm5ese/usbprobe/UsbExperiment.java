@@ -99,6 +99,11 @@ public final class UsbExperiment extends Instrumentation {
                 result.putString("stream", "PASS: " + passed + " selector UX checks; no network, USB or saved capture changes");
                 finish(0,result); return;
             }
+            if ("SESSION_HASH_TEST".equals(arguments.getString("authorization"))) {
+                int passed=SessionPersistenceChecks.run(this);
+                result.putString("stream","PASS: "+passed+" session/hash checks; isolated Keystore and fake HTTP, no real login or uploads");
+                finish(0,result);return;
+            }
             if ("SYNC_LOCAL_TEST".equals(arguments.getString("authorization"))) {
                 int passed=CloudSyncChecks.run(this);
                 result.putString("stream", "PASS: " + passed + " isolated cloud-sync checks; synthetic transport, no USB or production writes");

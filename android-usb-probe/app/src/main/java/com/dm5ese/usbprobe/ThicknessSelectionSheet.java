@@ -34,7 +34,7 @@ import static com.dm5ese.usbprobe.SyncSheetUi.*;
 
 /** Recyclable selector. Does not authenticate, enqueue, send or alter snapshots. */
 final class ThicknessSelectionSheet extends BottomSheetDialog {
-    record Source(JSONObject snapshot,String status){}
+    record Source(JSONObject snapshot,String status,String fileHash){ Source(JSONObject snapshot,String status){this(snapshot,status,"");} }
     record Loaded(List<Source> sources,int totalFiles,int unreadable){}
     interface Loader { Loaded load() throws Exception; }
     private final Activity activity;
@@ -43,6 +43,7 @@ final class ThicknessSelectionSheet extends BottomSheetDialog {
     private final Loader loader;
     private final Consumer<List<JSONObject>> continuation;
     private final LinkedHashMap<String,JSONObject> snapshots=new LinkedHashMap<>();
+    private final Map<String,String> fileHashes=new HashMap<>();
     private SyncSelectionModel model=new SyncSelectionModel(List.of());
     private final LinearLayout root,header,footer;
     private final TextView brand,subtitle,counter,results,notice,emptyTitle,emptyHint;
@@ -65,7 +66,7 @@ final class ThicknessSelectionSheet extends BottomSheetDialog {
             ThicknessSyncQueue queue=new ThicknessSyncQueue(a.getApplicationContext());
             for(File file:files.subList(0,Math.min(100,files.size()))){
                 if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException();
-                try {JSONObject snapshot=store.load(file);sources.add(new Source(snapshot,queue.statusForLastAccount(snapshot)));}
+                try {JSONObject snapshot=store.load(file);sources.add(new Source(snapshot,queue.statusForLastAccount(snapshot),queue.fileHashForLastAccount(snapshot)));}
                 catch(Exception e){bad++;}
             }
             return new Loaded(sources,files.size(),bad);
@@ -189,7 +190,7 @@ final class ThicknessSelectionSheet extends BottomSheetDialog {
         emptyTitle.setText(R.string.sync_loading_error);emptyHint.setText("");emptyAction.setText(R.string.sync_retry);emptyAction.setVisibility(View.VISIBLE);emptyAction.setOnClickListener(v->load());
     }
     private void loaded(Loaded data){
-        totalFiles=data.totalFiles;unreadable=data.unreadable;snapshots.clear();List<SyncSelectionModel.Item> items=new ArrayList<>();
+        totalFiles=data.totalFiles;unreadable=data.unreadable;snapshots.clear();fileHashes.clear();List<SyncSelectionModel.Item> items=new ArrayList<>();
         for(Source source:data.sources){
             try{
                 JSONObject snapshot=source.snapshot;String id=snapshot.getString("captureId");
@@ -201,7 +202,7 @@ final class ThicknessSelectionSheet extends BottomSheetDialog {
                     if("EMPTY".equals(state)&&value.isEmpty()){emptyCount++;continue;}
                     if(("OK".equals(state)||"LOCAL_MEASURED".equals(state))&&"mm".equals(point.optString("unit"))&&value.matches("[0-9]+([.][0-9]+)?")&&new BigDecimal(value).signum()>0)measured++;else invalid++;
                 }
-                snapshots.put(id,snapshot);
+                snapshots.put(id,snapshot);fileHashes.put(id,source.fileHash);
                 items.add(new SyncSelectionModel.Item(id,snapshot.optString("file",ui.getString(R.string.sync_no_name)),source.status,
                     snapshot.optString("editedAt",snapshot.optString("capturedAt","")),points.length(),measured,emptyCount,invalid));
             }catch(Exception e){unreadable++;}
@@ -251,7 +252,7 @@ final class ThicknessSelectionSheet extends BottomSheetDialog {
     }
     private final class CaptureHolder extends RecyclerView.ViewHolder {
         final MaterialCardView card;
-        final TextView name,date,revision,metrics,status,cells;
+        final TextView name,date,revision,metrics,status,cells,fileHash;
         final ImageView checked;
         CaptureHolder(){
             super(new MaterialCardView(ui));card=(MaterialCardView)itemView;
@@ -273,10 +274,12 @@ final class ThicknessSelectionSheet extends BottomSheetDialog {
             LinearLayout bottom=new LinearLayout(ui);bottom.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams bp=lp(-1,-2);bp.topMargin=d(10);body.addView(bottom,bp);
             status=text(ui,"",11,MUTED,true);status.setPadding(d(8),d(5),d(8),d(5));bottom.addView(status,lp(-2,-2));
             metrics=text(ui,"",12,MUTED,false);metrics.setGravity(Gravity.END);metrics.setPadding(d(8),0,0,0);bottom.addView(metrics,new LinearLayout.LayoutParams(0,-2,1));
+            fileHash=text(ui,"",11,MUTED,false);fileHash.setTypeface(android.graphics.Typeface.MONOSPACE);fileHash.setPadding(0,d(10),0,0);body.addView(fileHash,lp(-1,-2));
             card.setOnClickListener(v->{int position=getBindingAdapterPosition();if(position!=RecyclerView.NO_POSITION)select(adapter.rows.get(position).item.id);});
         }
         void bind(Row row){
             var i=row.item;card.setTag(i.id);name.setText(i.name);String formatted=i.date(ZoneId.systemDefault());date.setText(formatted.isBlank()?ui.getString(R.string.sync_no_date):formatted);
+            String hash=fileHashes.getOrDefault(i.id,"");fileHash.setText(hash.isBlank()?"":"SHA-256 · "+hash.substring(0,16)+"…");fileHash.setVisibility(hash.isBlank()?View.GONE:View.VISIBLE);
             revision.setText(ui.getString(R.string.sync_revision,i.shortId()));cells.setText(ui.getString(R.string.sync_cells,i.cells));
             String summary=ui.getString(R.string.sync_metrics,i.measured,i.empty)+(i.invalid>0?ui.getString(R.string.sync_invalid,i.invalid):"");metrics.setText(summary);
             status.setText(statusLabel(i.status));status.setTextColor(statusInk(i.status));status.setBackground(shape(ui,statusFill(i.status),0,7));

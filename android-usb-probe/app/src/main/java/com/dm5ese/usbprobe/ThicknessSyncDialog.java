@@ -19,8 +19,9 @@ final class ThicknessSyncDialog {
     private static final class Run {
         final Activity activity; final ThicknessSyncClient client; final ProgressDialog progress;
         final AtomicBoolean stopped = new AtomicBoolean();
+        volatile java.util.concurrent.CompletableFuture<Boolean> decision; volatile android.app.Dialog confirmation;
         Run(Activity a, ThicknessSyncClient c, ProgressDialog p) { activity=a; client=c; progress=p; }
-        void stop() { stopped.set(true); client.cancel(); progress.dismiss(); }
+        void stop() { stopped.set(true); client.cancel(); if(decision!=null)decision.complete(false);if(confirmation!=null)confirmation.dismiss();progress.dismiss(); }
     }
     static void pause(Activity activity) { Run r=activeRun; if(r!=null && r.activity==activity) r.stop(); }
     private static LinearLayout column(Activity a) {
@@ -47,47 +48,74 @@ final class ThicknessSyncDialog {
     }
 
     private static void credentials(Activity a,Executor worker,Runnable refresh,List<JSONObject> picked){
-        LinearLayout form=column(a);EditText email=new EditText(a);email.setHint("E-mail do IntegraNR");email.setInputType(33);form.addView(email);
-        EditText password=new EditText(a);password.setHint("Senha");password.setInputType(129);form.addView(password);
-        CheckBox consent=new CheckBox(a);consent.setText("Vincular estas revisões à minha conta/empresa e enviar. Repetir falhas selecionadas; nunca enviar pendências de outra conta.");form.addView(consent);
-        AlertDialog login=new AlertDialog.Builder(a).setTitle("Enviar para minha conta").setMessage("A senha não é salva. Após o envio: Med.Online → Medição de espessuras. Mantenha o aplicativo aberto.")
-            .setView(form).setNegativeButton("Cancelar",null).setPositiveButton("Vincular e enviar",null).create();
-        login.setOnShowListener(v->login.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(z->{
-            String e=email.getText().toString().trim(),pw=password.getText().toString();
-            if(e.isEmpty()||pw.isEmpty()||!consent.isChecked()){consent.setError("Confirme a conta e o envio das revisões selecionadas.");return;}
+        ThicknessAccountDialog.show(a,worker,picked.size(),choice->{
             if(!BUSY.compareAndSet(false,true))return;
-            password.setText("");login.dismiss();
-            ProgressDialog progress=new ProgressDialog(a);progress.setTitle("ES Medição → IntegraNR");progress.setMessage("Validando conta…");progress.setIndeterminate(true);progress.setCancelable(false);
+            ProgressDialog progress=new ProgressDialog(a);progress.setTitle("ES Medição → IntegraNR");
+            progress.setMessage("Conferindo conta e arquivos…");progress.setIndeterminate(true);progress.setCancelable(false);
             ThicknessSyncClient client=new ThicknessSyncClient();Run run=new Run(a,client,progress);activeRun=run;
             progress.setButton(AlertDialog.BUTTON_NEGATIVE,"Pausar",(d,w)->run.stop());progress.show();
-            worker.execute(()->sendSelected(run,e,pw,picked,refresh));
-        }));login.show();
+            try{worker.execute(()->sendSelected(run,choice,picked,refresh));}
+            catch(java.util.concurrent.RejectedExecutionException e){run.stop();BUSY.set(false);activeRun=null;}
+        });
     }
-    private static void sendSelected(Run run,String email,String password,List<JSONObject> picked,Runnable refresh){
-        Activity a=run.activity;ThicknessSyncQueue queue=new ThicknessSyncQueue(a);StringBuilder errors=new StringBuilder();int received=0,waiting=0;
+    private static boolean confirmReplacement(Run run,JSONObject preview,String file)throws Exception{
+        var answer=new java.util.concurrent.CompletableFuture<Boolean>();run.decision=answer;
+        run.activity.runOnUiThread(()->{
+            if(run.stopped.get()||run.activity.isDestroyed()||run.activity.isFinishing()){answer.complete(false);return;}
+            run.progress.hide();boolean identical="duplicate".equals(preview.optString("status"));
+            String detail=file+"\n\n"+(identical?"Este arquivo já existe na nuvem com o mesmo conteúdo. Confirmar reutiliza o registro existente, sem criar outra cópia.":
+                "Uma versão deste arquivo já existe na nuvem. A nova versão ficará no lugar da atual; a anterior será preservada no histórico.")
+                +"\n\nHash atual: "+preview.optString("existingHash")+"\n\nHash do envio: "+preview.optString("fileSha256");
+            var context=new android.view.ContextThemeWrapper(run.activity,R.style.SyncAccountTheme);
+            var alert=new com.google.android.material.dialog.MaterialAlertDialogBuilder(context).setTitle("Arquivo já existe. Sobrescrever?").setMessage(detail)
+                .setNegativeButton("Manter existente",(d,w)->answer.complete(false))
+                .setPositiveButton("Sobrescrever",(d,w)->answer.complete(true)).create();
+            alert.setOnCancelListener(d->answer.complete(false));alert.setOnDismissListener(d->answer.complete(false));run.confirmation=alert;alert.show();
+        });
+        boolean confirmed;
+        try{confirmed=answer.get(3,java.util.concurrent.TimeUnit.MINUTES);}
+        catch(java.util.concurrent.TimeoutException e){confirmed=false;}
+        finally{
+            run.decision=null;
+            run.activity.runOnUiThread(()->{if(run.confirmation!=null){run.confirmation.dismiss();run.confirmation=null;}if(!run.stopped.get()&&!run.activity.isDestroyed())run.progress.show();});
+        }
+        return confirmed&&!run.stopped.get();
+    }
+    private static void sendSelected(Run run,ThicknessAccountDialog.Choice choice,List<JSONObject> picked,Runnable refresh){
+        Activity a=run.activity;ThicknessSyncQueue queue=new ThicknessSyncQueue(a);StringBuilder notes=new StringBuilder();int received=0,waiting=0;
         try(ThicknessSyncClient client=run.client){
-            client.login(email,password);queue.setAccount(client.userId(),client.partnerId());
-            List<JSONObject> tasks=new ArrayList<>();
-            // All selected tasks are saved before sending any capture, so interruption is recoverable.
-            for(JSONObject snapshot:picked)try{tasks.add(queue.enqueue(client.userId(),client.partnerId(),snapshot,true));}
-            catch(Exception ex){errors.append("\n").append(snapshot.optString("file","Arquivo")).append(": ").append(ThicknessSyncRules.safeMessage(ex));}
-            for(JSONObject selected:tasks){
+            if(choice.saved!=null)client.restore(choice.saved,choice.store);
+            else{client.login(choice.email,choice.password);if(choice.remember)client.remember(choice.store);}
+            queue.setAccount(client.userId(),client.partnerId());
+            for(JSONObject snapshot:picked){
                 if(run.stopped.get()||Thread.currentThread().isInterrupted()){waiting++;continue;}
-                if("RECEIVED".equals(selected.optString("state"))){received++;continue;}
-                JSONObject task=queue.begin(selected,System.currentTimeMillis());
-                if(task==null){waiting++;continue;}
-                JSONObject snapshot=task.getJSONObject("snapshot");String name=snapshot.optString("file","Captura");
-                a.runOnUiThread(()->{if(!run.stopped.get())run.progress.setMessage("Enviando e conferindo recibo: "+name);});
-                try{JSONObject receipt=client.send(snapshot);queue.receipt(task,receipt);received++;}
-                catch(Exception ex){queue.failure(task,ex,System.currentTimeMillis());errors.append("\n").append(name).append(": ").append(ThicknessSyncRules.safeMessage(ex));}
+                String name=snapshot.optString("file","Captura");JSONObject task=null;
+                try{
+                    a.runOnUiThread(()->{if(!run.stopped.get())run.progress.setMessage("Conferindo hash: "+name);});
+                    JSONObject preview=client.preview(snapshot);String status=preview.getString("status");
+                    if("archived".equals(status)||"locked".equals(status)){
+                        waiting++;notes.append("\n").append(name).append(" — ").append("archived".equals(status)?"revisão histórica; a versão atual foi preservada.":"já incorporado à inspeção; não pode ser sobrescrito.");continue;
+                    }
+                    if(!"new".equals(status)&&!confirmReplacement(run,preview,name)){
+                        waiting++;notes.append("\n").append(name).append(" — arquivo existente mantido.");continue;
+                    }
+                    if(run.stopped.get()){waiting++;continue;}
+                    JSONObject selected=queue.enqueue(client.userId(),client.partnerId(),snapshot,true);
+                    selected=queue.recheckSelected(selected);
+                    task=queue.begin(selected,System.currentTimeMillis());
+                    if(task==null){waiting++;continue;}
+                    JSONObject receipt=client.send(task.getJSONObject("snapshot"),preview);queue.receipt(task,receipt);received++;
+                    notes.append("\n\n").append(name).append(" — confirmado\nHash: ").append(receipt.getString("fileSha256"));
+                }catch(Exception e){if(task!=null)queue.failure(task,e,System.currentTimeMillis());notes.append("\n").append(name).append(": ").append(ThicknessSyncRules.safeMessage(e));}
             }
-        }catch(Exception ex){errors.append("\n").append(ThicknessSyncRules.safeMessage(ex));}
+        }catch(Exception e){notes.append("\n").append(ThicknessSyncRules.safeMessage(e));}
         finally{BUSY.set(false);if(activeRun==run)activeRun=null;}
-        String result=received+" de "+picked.size()+" revisões com recibo confirmado. "+(waiting>0?waiting+" pendente(s) aguardando nova tentativa. ":"")
-            +"Os arquivos continuam salvos no celular. Para retomar, selecione as pendências em Sincronizar; o intervalo entre tentativas é respeitado."+errors;
+        String result=received+" de "+picked.size()+" arquivo(s) confirmado(s). "+(waiting>0?waiting+" não enviado(s). ":"")
+            +"As capturas continuam no celular. O mesmo hash identifica o arquivo no Med.Online."+notes;
         a.runOnUiThread(()->{
             if(a.isDestroyed()||a.isFinishing())return;run.progress.dismiss();refresh.run();if(run.stopped.get())return;
-            new AlertDialog.Builder(a).setTitle("Resultado da sincronização").setMessage(result).setPositiveButton("OK",null)
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(new android.view.ContextThemeWrapper(a,R.style.SyncAccountTheme))
+                .setTitle("Resultado da sincronização").setMessage(result).setPositiveButton("OK",null)
                 .setNeutralButton("Abrir IntegraNR",(d,w)->a.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://app.gestaonr13.com.br/calibracao/med-online?tipo=espessuras")))).show();
         });
     }

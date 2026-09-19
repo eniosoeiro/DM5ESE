@@ -60,16 +60,24 @@ final class CloudSyncChecks {
             JSONObject resumed=q.enqueue(OWNER,PARTNER,interrupted,true);
             check(q.begin(resumed,System.currentTimeMillis())!=null,"manual recovery after final interrupted attempt");
             class Fake implements ThicknessSyncClient.Transport{
-                final List<String> calls=new ArrayList<>();JSONObject receivedEnvelope;boolean wrongReceipt;
+                final List<String> calls=new ArrayList<>();JSONObject receivedEnvelope,lastReceipt;boolean wrongReceipt;
                 public String request(String method,String path,JSONObject body,String token)throws Exception{
                     calls.add(method+" "+path);
                     if(path.startsWith("/auth/v1/token"))return "{\"access_token\":\"synthetic-session\"}";
                     if(path.equals("/auth/v1/user"))return new JSONObject().put("id",OWNER).toString();
                     if(path.contains("mobile_access_status"))return "{\"allowed\":true}";
                     if(path.startsWith("/rest/v1/profiles"))return new JSONArray().put(new JSONObject().put("parceiro_id",PARTNER)).toString();
-                    if(path.contains("receive_es_thickness_capture")){receivedEnvelope=body.getJSONObject("p_envelope");return receipt().toString();}
+                    if(path.contains("receive_es_thickness_capture")){
+                        receivedEnvelope=body.getJSONObject("p_envelope");lastReceipt=receipt().put("fileSha256","f".repeat(64))
+                            .put("fileKeySha256","a".repeat(64)).put("requestSha256","d".repeat(64))
+                            .put("requestRevisionId",receivedEnvelope.getString("revisionId")).put("requestLineageId",receivedEnvelope.getString("lineageId"))
+                            .put("requestClientSha256",receivedEnvelope.getString("contentSha256"));return lastReceipt.toString();
+                    }
+                    if(path.startsWith("/rest/v1/es_thickness_upload_receipts"))return new JSONArray().put(new JSONObject().put("capture_id",lastReceipt.getString("id"))
+                        .put("revision_id",wrongReceipt?OTHER:receivedEnvelope.getString("revisionId")).put("lineage_id",receivedEnvelope.getString("lineageId"))
+                        .put("request_sha256","d".repeat(64)).put("client_sha256",receivedEnvelope.getString("contentSha256"))).toString();
                     if(path.startsWith("/rest/v1/es_thickness_captures"))return new JSONArray().put(new JSONObject().put("revision_id",wrongReceipt?OTHER:receivedEnvelope.getString("revisionId"))
-                        .put("lineage_id",receivedEnvelope.getString("lineageId")).put("client_content_sha256",receivedEnvelope.getString("contentSha256")).put("content_sha256","b".repeat(64))).toString();
+                        .put("lineage_id",receivedEnvelope.getString("lineageId")).put("client_content_sha256",receivedEnvelope.getString("contentSha256")).put("content_sha256","b".repeat(64)).put("file_sha256","f".repeat(64)).put("is_current",true)).toString();
                     if(path.equals("/auth/v1/logout?scope=local"))return "";
                     throw new IOException("Unexpected fake request");
                 }

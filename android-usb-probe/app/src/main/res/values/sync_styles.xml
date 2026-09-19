@@ -27,4 +27,10 @@
         <item name="cornerSizeBottomLeft">0dp</item>
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
+    <style name="SyncAccountTheme" parent="Theme.Material3.Light.Dialog.Alert">
+        <item name="colorPrimary">#087F70</item>
+        <item name="colorSurface">#F4F7F8</item>
+        <item name="colorOnSurface">#17313E</item>
+        <item name="android:windowSoftInputMode">adjustResize</item>
+    </style>
 </resources>
