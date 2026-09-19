@@ -1,0 +1,52 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.dm5ese.usbprobe'
+    compileSdk 35
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'com.dm5ese.usbprobe'
+        minSdk 33
+        targetSdk 35
+        versionCode 35
+        versionName '0.17.0'
+        // Only public SPA configuration is reused; never read admin or signing secrets.
+        def publicConfig = [:]
+        def publicEnv = rootProject.file('../../gestaonr13-app/.env.local')
+        if (publicEnv.isFile()) publicEnv.eachLine('UTF-8') { line ->
+            def match = line =~ /^(VITE_SUPABASE_URL|VITE_SUPABASE_PUBLISHABLE_KEY)\s*=\s*(.+)$/
+            if (match.matches()) publicConfig[match[0][1]] = match[0][2].trim().replaceAll(/^["']|["']$/, '')
+        }
+        def syncUrl = providers.gradleProperty('ES_SYNC_URL').orElse(providers.environmentVariable('ES_SYNC_URL')).getOrElse(publicConfig['VITE_SUPABASE_URL'] ?: '')
+        def syncKey = providers.gradleProperty('ES_SYNC_PUBLISHABLE_KEY').orElse(providers.environmentVariable('ES_SYNC_PUBLISHABLE_KEY')).getOrElse(publicConfig['VITE_SUPABASE_PUBLISHABLE_KEY'] ?: '')
+        if (syncUrl != 'https://kmapwhnaeckgtsqnqvrg.supabase.co') throw new GradleException('Configure ES_SYNC_URL com o backend validado do IntegraNR.')
+        boolean publicOnly = syncKey.startsWith('sb_publishable_')
+        if (!publicOnly) {
+            try {
+                def claims = new groovy.json.JsonSlurper().parseText(new String(java.util.Base64.urlDecoder.decode(syncKey.split('\\.')[1]), 'UTF-8'))
+                publicOnly = claims.role == 'anon' && (!claims.ref || claims.ref == 'kmapwhnaeckgtsqnqvrg')
+            } catch (Exception ignored) { publicOnly = false }
+        }
+        if (!publicOnly) throw new GradleException('Somente chave pública/anon é permitida no APK; nunca service_role ou sb_secret.')
+        buildConfigField 'String', 'ES_SYNC_URL', '"' + syncUrl.replace('\\','\\\\').replace('"','\\"') + '"'
+        buildConfigField 'String', 'ES_SYNC_PUBLISHABLE_KEY', '"' + syncKey.replace('\\','\\\\').replace('"','\\"') + '"'
+        testInstrumentationRunner 'com.dm5ese.usbprobe.UsbExperiment'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies { testImplementation 'junit:junit:4.13.2' }
+
+// Distribution filename follows the version embedded in the APK.
+def exportDebugApk = tasks.register('exportDebugApk', Copy) {
+    dependsOn 'packageDebug'
+    from(layout.buildDirectory.file('outputs/apk/debug/app-debug.apk'))
+    into(rootProject.file('../artifacts/android-usb'))
+    rename { "ES-Medicao-v${android.defaultConfig.versionName}.apk" }
+}
+tasks.matching { it.name == 'assembleDebug' }.configureEach {
+    finalizedBy(exportDebugApk)
+}

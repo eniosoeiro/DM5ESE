@@ -1,0 +1,14 @@
+<resources>
+    <style name="InstrumentTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">#F3F7F8</item>
+        <item name="android:colorAccent">#087F70</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#102A36</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowSplashScreenBackground">#102A36</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_es_mark</item>
+    </style>
+</resources>

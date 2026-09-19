@@ -1,0 +1,8 @@
+.gradle/
+**/build/
+local.properties
+
+# Keep signing material and local configuration out of version control
+*.jks
+*.keystore
+keystore.properties
