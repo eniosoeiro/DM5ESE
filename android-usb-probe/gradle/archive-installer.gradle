@@ -1,0 +1,24 @@
+// Run only after successful APK assembly, never as a finalizer on a failed build.
+// Archives locally; publishing is a separate, explicit operation.
+def registryScript = rootProject.file('../scripts/installer-registry.mjs')
+def archiveRoot = System.getenv('ES_INSTALLER_DIR') ?: rootProject.file('../artifacts/installers').absolutePath
+
+tasks.matching { it.name in ['assembleDebug', 'assembleRelease'] }.configureEach { assembled ->
+    def variant = assembled.name == 'assembleDebug' ? 'debug' : 'release'
+    assembled.doLast {
+        def outputDir = layout.buildDirectory.dir("outputs/apk/${variant}").get().asFile
+        def metadataFile = new File(outputDir, 'output-metadata.json')
+        if (!metadataFile.isFile()) throw new GradleException('APK sem output-metadata.json; nenhum latest foi atualizado.')
+        def metadata = new groovy.json.JsonSlurper().parse(metadataFile)
+        if (metadata.elements.size() != 1 || metadata.elements[0].filters) throw new GradleException('Distribuição exige APK único; splits não são publicados como instalador completo.')
+        def apk = new File(outputDir, metadata.elements[0].outputFile)
+        if (apk.parentFile.canonicalFile != outputDir.canonicalFile || !apk.isFile()) throw new GradleException('Arquivo APK inválido no manifesto.')
+        def javaExecutable = new File(System.getProperty('java.home'), 'bin/java' + (org.gradle.internal.os.OperatingSystem.current().isWindows() ? '.exe' : ''))
+        exec {
+            commandLine (System.getenv('ES_NODE_BIN') ?: 'node'), registryScript.absolutePath,
+                'archive', '--id', project.ext.installerAppId, '--apk', apk.absolutePath,
+                '--out', archiveRoot, '--sdk', android.sdkDirectory.absolutePath,
+                '--java', javaExecutable.absolutePath
+        }
+    }
+}

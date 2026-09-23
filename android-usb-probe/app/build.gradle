@@ -54,3 +54,7 @@ def exportDebugApk = tasks.register('exportDebugApk', Copy) {
 tasks.matching { it.name == 'assembleDebug' }.configureEach {
     finalizedBy(exportDebugApk)
 }
+
+// Archive each successful build; publishing stays explicit.
+ext.installerAppId = 'es-medicao'
+apply from: rootProject.file('gradle/archive-installer.gradle')
